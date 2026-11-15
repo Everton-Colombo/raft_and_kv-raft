@@ -37,7 +37,10 @@ Raft's fault tolerance comes at a cost, however. Every operation must reach a ma
 and waiting for them over the network costs throughput and latency. Moreover, Raft keeps that single order by routing all client requests through one leader replica, so when the leader crashes,
 the service stops until the other replicas elect a new one.
 
-With this in mind, this project had two main parts: 1. Implementing Raft, as well as a simple key-value storage system on top of it, with the goal of understanding in detail how this consensus algorithm works; and 2. Building an experimental harness on top of these implementations to measure the cost of fault tolerance in a realistic environment. By implementing the resulting system, key distributed systems concepts were explored, such as leader election, consensus, replication and consistency, fault detection and tolerance, peer-to-peer communication, among others.
+With this in mind, this project had two main parts: (1) implementing Raft and a simple key/value storage system on top of it to understand the protocol in detail,
+and checking it against the extensive test suite of MIT's 6.824 course~\cite{mit6824};
+and (2) automating experiments to measure the cost of fault tolerance in a containerized deployment. Together, these parts cover key distributed systems topics such as leader election, consensus,
+replication, consistency, and failure detection.
 
 The project repository can be accessed \href{https://github.com/Everton-Colombo/raft_and_kv-raft}{here}, and a demonstration video \href{https://youtu.be/8nt4VyT0qKw}{here}.
 
