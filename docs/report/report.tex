@@ -183,7 +183,10 @@ The Raft paper~\cite{raft2014} already proves that the protocol is safe, so our 
 so after a crash and restart it still knows whom it voted for and cannot vote again in the same term. A candidate needs votes from more than $N/2$ nodes, its own included.
 Two leaders in the same term would need two such majorities, and any two majorities of the same $N$ nodes share at least one node, which would have had to vote twice (contradiction).
 
-\paragraph{Log Matching} A leader only appends to its own log, so it creates at most one entry per index in its term. Each \texttt{AppendEntries} RPC carries the index and term of the entry right before the new ones, and the follower refuses it unless it has that exact entry. Every accepted request therefore extends a prefix that the follower already shares with the leader, and by induction, if two logs have an entry with the same index and term, they agree on everything before it.
+\paragraph{Log Matching} A leader never overwrites or deletes entries in its own log, only appends new ones, so it creates at most one entry per index in its term.
+Each \texttt{AppendEntries} RPC carries the index and term of the entry right before the new ones, and the follower refuses the request unless it has that exact entry.
+Every accepted request therefore extends a prefix that the follower already shares with the leader, and by induction, if two logs have an entry with the same index and term,
+they agree on everything before it.
 
 \paragraph{Committed entries are never lost} The main idea that supports this is the election restriction, which states that a node only votes for a candidate whose log is at least as up to date as its own, meaning its last entry has a higher term, or the same term and an index at least as high. A committed entry is stored on a majority and the new leader was voted in by a majority, so at least one of a leader's voters has the entry and would have refused a candidate without it. The paper turns this intuition into an induction over terms.
 
