@@ -204,7 +204,9 @@ If a reply is lost, the \texttt{Clerk} sends the request again, possibly to anot
 the \texttt{Seq} and result of the last operation it applied, and a request whose \texttt{Seq} is not newer than that gets the stored result instead of being applied a second time.
 Since a \texttt{Clerk} has only one request in flight at a time, remembering the last one is enough.
 
-\paragraph{Liveness} Unlike safety, liveness depends on timing. Randomized election timeouts make repeated split votes unlikely, and once a leader can reach a majority, its heartbeats keep the followers from starting new elections while it retries \texttt{AppendEntries} until every entry is replicated.
+\paragraph{Liveness} Unlike safety, liveness depends on timing, and holds only while a majority of nodes is up and can exchange messages within the timeouts. Under that condition,
+randomized election timeouts make repeated split votes (elections in which no candidate gets a majority) unlikely. Once a leader is elected,
+its heartbeats keep the followers from starting new elections while it retries \texttt{AppendEntries} until each entry is committed.
 
 \subsection{Automated tests}\label{sec:correct-tests}
 
