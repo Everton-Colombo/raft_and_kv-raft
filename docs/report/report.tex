@@ -27,7 +27,15 @@
 \maketitle
 
 \section{Introduction}
-Replicating a service across several machines a standard way to make systems resilient to faults, but copying alone is not enough: the replicas must agree on a single order of operations, and they must keep agreeing while links drop messages, nodes leave and reenter the grid, among other failures. Many consensus algorithms that provide a solution to this problem exist today, and maintaining a log of agreed-upon state-machine operations is a common implementation approach. The Raft algorithm~\cite{raft2014} is a widely used consensus protocol that is designed to be understandable and easy to teach, and it is the basis of many production systems, including etcd, Consul, and CockroachDB. The practical question, however, is not only whether a protocol can be implemented correctly, but what that correctness costs in throughput, tail latency, and recovery time when faults actually happen.
+Replicating a service across several machines is a standard way to make systems resilient to faults, but copying alone is not enough:
+the replicas must agree on a single order of operations so that all copies stay identical, and they must keep agreeing while the network drops or delays messages,
+or while replicas crash and later rejoin the cluster.
+Many consensus algorithms solve this problem by having every replica apply the same log of commands. The Raft algorithm~\cite{raft2014} is one of them:
+it was designed to be easy to understand and is the basis of many production systems, including etcd, Consul, and CockroachDB.
+
+Raft's fault tolerance comes at a cost, however. Every operation must reach a majority of the replicas before it is answered, so that it is not lost if a minority of them crash,
+and waiting for them over the network costs throughput and latency. Moreover, Raft keeps that single order by routing all client requests through one leader replica, so when the leader crashes,
+the service stops until the other replicas elect a new one.
 
 With this in mind, this project had two main parts: 1. Implementing Raft, as well as a simple key-value storage system on top of it, with the goal of understanding in detail how this consensus algorithm works; and 2. Building an experimental harness on top of these implementations to measure the cost of fault tolerance in a realistic environment. By implementing the resulting system, key distributed systems concepts were explored, such as leader election, consensus, replication and consistency, fault detection and tolerance, peer-to-peer communication, among others.
 
