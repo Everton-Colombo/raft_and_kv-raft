@@ -384,15 +384,22 @@ A common way to build a fault-tolerant service is the \emph{replicated state mac
 
 \paragraph{Persistence and snapshots} Each server saves its current term, its vote and its log to stable storage before answering any RPC, so that it can crash, restart and rejoin without breaking promises it made before the crash. Since the log would otherwise grow forever, the service periodically saves a \emph{snapshot} of its state, and Raft throws away the log entries that the snapshot covers. A follower that is so far behind that the leader no longer has the entries it needs receives the leader's snapshot through \texttt{InstallSnapshot}.
 
-\section{Reused Code and Modifications}
-\label{sec:algs-reuse}
-All the code we reused comes from the framework MIT's 2020 offering of the 6.824 course labs 2 and 3~\cite{mit6824}. Here is what was kept, what was changed, and what was self-written.
+\section{Reused Code and Modifications}\label{sec:algs-reuse}
+All the code we reused comes from the framework of MIT's 6.824 course (2020)~\cite{mit6824}, specifically labs 2 and 3.
 
-The starting point were the stubs in \texttt{raft.go}, \texttt{server.go}, \texttt{client.go} and \texttt{common.go}, which define the API that the tests call (\texttt{Make}, \texttt{Start}, \texttt{GetState}, \texttt{StartKVServer}, the \texttt{Clerk} methods and the RPC argument types). We kept that API and wrote everything behind it. Among the elements kept as they were, are the simulated in-memory network (\texttt{labrpc}), the gob wrapper (\texttt{labgob}), the Porcupine checker~\cite{porcupine} with its key/value model, and the test suites with their harnesses (\texttt{test\_test.go} and \texttt{config.go} in \texttt{src/raft} and \texttt{src/kvraft}).
+The starting point was the stubs in \texttt{raft.go}, \texttt{server.go}, \texttt{client.go} and \texttt{common.go}, which define the API that the tests call (\texttt{Make}, \texttt{Start},
+\texttt{GetState}, \texttt{StartKVServer}, the \texttt{Clerk} methods and the RPC argument types). We kept that API and wrote everything behind it.
+Among the elements kept as they were are the simulated in-memory network (\texttt{labrpc}), the gob wrapper (\texttt{labgob}), the Porcupine checker~\cite{porcupine} with its key/value model,
+and the test suites (\texttt{test\_test.go}) with their harnesses (\texttt{config.go}), in both \texttt{src/raft} and \texttt{src/kvraft}, apart from the first change below.
 
-Small changes to the labs' skeleton were made. The one-method \texttt{RPCClient} interface was added to \texttt{labrpc} and the test harnesses was made to use it instead of the concrete \texttt{*labrpc.ClientEnd} type, which changes no test logic, but allowed tswitching between the in-memory simulated network of the tests and the actual TCP layer used in deployment. We also gave the \texttt{Persister} an optional file-backed mode (\texttt{MakeFilePersister}), used only in deployment, while the tests still use the in-memory version.
+We made two small changes to the labs' skeleton.
+The one-method \texttt{RPCClient} interface was added to \texttt{labrpc}, and the test harnesses were made to use it instead of the concrete \texttt{*labrpc.ClientEnd} type,
+which changes no test logic but allows switching between the simulated in-memory network of the tests and the TCP transport used in deployment.
+We also gave the \texttt{Persister} an optional file-backed mode (\texttt{MakeFilePersister}), used only in deployment, while the tests still use the in-memory version.
 
-Everything else was self-written: the Raft implementation (about 1{,}000 lines in \texttt{raft.go}), the KV server and \texttt{Clerk}, the TCP transport (\texttt{labrpc/tcp.go}), the HTTP API with \texttt{/status} and \texttt{HTTPEnd} (\texttt{kvraft/http.go}), the node binary (\texttt{cmd/kvnode}), the load generator (\texttt{cmd/kvbench}), our TCP/HTTP test, the \texttt{Dockerfile} and \texttt{compose.yaml}, and the experiment scripts.
+Everything else was written by us: the Raft implementation (about 1{,}000 lines in \texttt{raft.go}), the KV server and \texttt{Clerk}, the TCP transport (\texttt{labrpc/tcp.go}),
+the HTTP API with \texttt{/status} and \texttt{HTTPEnd} (\texttt{kvraft/http.go}), the node binary (\texttt{cmd/kvnode}), the benchmark client (\texttt{cmd/kvbench}),
+our \texttt{TestHTTPAndTCPCluster} test, the \texttt{Dockerfile} and \texttt{compose.yaml}, and the experiment scripts.
 
 \section{Automated Tests: Detailed Descriptions}
 \label{sec:correct-tests-detail}
