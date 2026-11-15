@@ -45,10 +45,10 @@ replication, consistency, and failure detection.
 The project repository can be accessed \href{https://github.com/Everton-Colombo/raft_and_kv-raft}{here}, and a demonstration video \href{https://youtu.be/8nt4VyT0qKw}{here}.
 
 \subsection*{Basis and scope}
-This project's starting point was the framework of labs 2 (Raft) and 3 (a key/value service on top of it) of MIT's 6.824 course (2020)~\cite{mit6824}, which supplied, crucially,
+This project's starting point was the framework of MIT's 6.824 course (2020)~\cite{mit6824}, specifically labs 2 (Raft) and 3 (a key/value service on top of it), which supplied, crucially,
 a thorough set of tests, along with what they need to run: the function signatures they call, a simulated in-memory network on which they inject faults,
-and the Porcupine linearizability checker~\cite{porcupine}. The Raft and key/value code (and everything around it) is ours. Appendix~\ref{sec:algs-reuse} lists exactly what was kept,
-changed, and written. Concretely, we built:
+and the Porcupine linearizability checker~\cite{porcupine}. The Raft and key/value implementations are ours, as are the deployment and experiments built around them.
+Appendix~\ref{sec:algs-reuse} lists exactly what was kept, changed, and written. Concretely, we built:
 
 \begin{itemize}
 \item \textbf{Raft}, with leader election, log replication, persistence and snapshots, closely following the Raft paper~\cite{raft2014}.
