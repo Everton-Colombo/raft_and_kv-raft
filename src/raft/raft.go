@@ -76,7 +76,7 @@ const HeartBeatTimeout = 150 * time.Millisecond
 type Raft struct {
 	mu        sync.Mutex // Lock to protect shared access to this peer's state
 	applyCond *sync.Cond
-	peers     []labrpc.RPCClient //  // FollowerRPC end points of all peers
+	peers     []labrpc.RPCClient // RPC end points of all peers
 	persister *Persister         // Object to hold this peer's persisted state
 	me        int                // this peer's index into peers[]
 	dead      int32              // set by Kill()
@@ -234,8 +234,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	// fmt.Printf("[%d::RequestVote()] Passed lock!\n", rf.me)
-
 	reply.VoteGranted = false
 	reply.Term = rf.currentTerm
 
@@ -369,7 +367,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	prevIndex := rf.toLogIdx(args.PrevLogIndex)
 	missingPrev := args.PrevLogIndex > rf.lastLogIndex() || (args.PrevLogIndex >= 0 && prevIndex < 0)
 	if missingPrev || (args.PrevLogIndex >= 0 && rf.log[prevIndex].Term != args.PrevLogTerm) {
-		// Rejected due to log incosistency.
+		// Rejected due to log inconsistency.
 
 		debugLog.Printf("[%d::AppendEntries()] Rejected AE.\n", rf.me)
 		reply.Success = false
@@ -409,7 +407,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// Update commitIndex
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, rf.lastLogIndex())
-		rf.applyCond.Broadcast() // kick off applyier goroutine
+		rf.applyCond.Broadcast() // kick off applier goroutine
 	}
 
 	reply.Success = true
@@ -418,7 +416,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // example code to send a RequestVote RPC to a server.
 // server is the index of the target server in rf.peers[].
 // expects RPC arguments in args.
-// fills in *reply with RPC reply, so caller shointerfaceuld
+// fills in *reply with RPC reply, so caller should
 // pass &reply.
 // the types of the args and reply passed to Call() must be
 // the same as the types of the arguments declared in the
@@ -460,8 +458,7 @@ func (rf *Raft) sendInstallSnapshot(server int, args *InstallSnapshotArgs, reply
 	return ok
 }
 
-// Function that implements the operations related to applying commited messages.
-// Should be launched as a separate goroutine from the launchOps function()
+// applyOp delivers committed entries and pending snapshots through applyCh.
 func (rf *Raft) applyOp() {
 	rf.applyCond.L.Lock()
 	defer rf.applyCond.L.Unlock()
@@ -472,11 +469,8 @@ func (rf *Raft) applyOp() {
 			return
 		}
 
-		// Collect the messages to send under the lock, then send without
-		// holding rf.mu so the service can call back into raft (Snapshot,
-		// CondInstallSnapshot) without deadlocking. Do not touch rf.log or
-		// rf.commitIndex again after releasing the lock: a concurrent
-		// AppendEntries may truncate the log.
+		// send outside the lock so the service can call back into raft; after
+		// unlocking, a concurrent AppendEntries may truncate rf.log
 		var msgs []ApplyMsg
 		if rf.pendingSnapshot != nil {
 			msgs = append(msgs, *rf.pendingSnapshot)
@@ -542,8 +536,6 @@ func (rf *Raft) runElection() {
 		args := RequestVoteArgs{
 			Term:        rf.currentTerm,
 			CandidateId: rf.me,
-			// LastLogIndex: len(rf.log) - 1,
-			// LastLogTerm:  rf.log[len(rf.log)-1].Term,
 		}
 		args.LastLogIndex = rf.lastLogIndex()
 		args.LastLogTerm = rf.log[len(rf.log)-1].Term
@@ -622,12 +614,6 @@ func (rf *Raft) runElection() {
 			rf.matchIndex[i] = -1
 		}
 
-		// Commit no-op
-		// rf.log = append(rf.log, LogEntry{
-		// 	Term:    rf.currentTerm,
-		// 	Command: nil,
-		// })
-		// rf.commitIndex = len(rf.log) - 1
 		rf.applyCond.Broadcast()
 
 		debugLog.Printf("[%d::runElection()] Elected as leader for term %d.\n", rf.me, rf.currentTerm)
@@ -646,8 +632,7 @@ func (rf *Raft) candidateBehavior() {
 		rf.runElection()
 	} else {
 		rf.mu.Unlock()
-		// Waiting for the election timeout; without this the state-machine
-		// goroutine spins and a losing candidate pegs a core.
+		// avoid spinning while the election timeout runs
 		time.Sleep(20 * time.Millisecond)
 	}
 
@@ -674,9 +659,7 @@ func (rf *Raft) leaderBehavior() {
 
 	rf.mu.Unlock()
 
-	// Without this the state-machine goroutine spins, spawning replicateTo
-	// goroutines as fast as the scheduler allows. Under load that saturates the
-	// CPU, heartbeats slip past the election timeout and the cluster livelocks.
+	// without this, heartbeat goroutines pile up and the cluster livelocks
 	time.Sleep(HeartBeatTimeout / 3)
 }
 

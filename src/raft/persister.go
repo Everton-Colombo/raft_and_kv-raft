@@ -45,8 +45,7 @@ func (ps *Persister) Copy() *Persister {
 	return np
 }
 
-// ponytail: temp+rename survives a crash mid-write; no fsync, so a power loss
-// can still drop the last write. Add f.Sync() + directory sync if that matters.
+// temp+rename, but no fsync: a power loss can still drop the last write.
 func (ps *Persister) writeFile(name string, data []byte) {
 	tmp := filepath.Join(ps.dir, name+".tmp")
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {

@@ -54,8 +54,8 @@ type KVServer struct {
 
 	// Your definitions here.
 	kvStore                map[string]string
-	waitingRequests        map[RequestId]chan RequestResponse // command index -> channel
-	waitingIndex           map[int]RequestId                  // raft idx -> RequestId expeting to be there
+	waitingRequests        map[RequestId]chan RequestResponse
+	waitingIndex           map[int]RequestId // raft index -> RequestId expected there
 	lastResponseValueCache map[int]ClientReponseRecord
 }
 
@@ -216,6 +216,10 @@ func (kv *KVServer) killed() bool {
 	return z == 1
 }
 
+func (kv *KVServer) Raft() *raft.Raft {
+	return kv.rf
+}
+
 // servers[] contains the ports of the set of
 // servers that will cooperate via Raft to
 // form the fault-tolerant key/value service.
@@ -228,10 +232,6 @@ func (kv *KVServer) killed() bool {
 // you don't need to snapshot.
 // StartKVServer() must return quickly, so it should start goroutines
 // for any long-running work.
-func (kv *KVServer) Raft() *raft.Raft {
-	return kv.rf
-}
-
 func StartKVServer(servers []labrpc.RPCClient, me int, persister *raft.Persister, maxraftstate int) *KVServer {
 	// call labgob.Register on structures you want
 	// Go's RPC library to marshall/unmarshall.

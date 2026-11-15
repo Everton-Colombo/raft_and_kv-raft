@@ -1,17 +1,3 @@
-% !TEX root = report.tex
-% ============================================================================
-% MC714 - Trabalho 2 - Report (IEEE, two columns, max. 6 pages + refs)
-%
-% Build:  latexmk -pdf -outdir=build report.tex
-% VS Code: LaTeX Workshop compiles on save (see .vscode/settings.json)
-%
-% Grading rubric -> sections:
-%   30% algorithm correctness + tests ..... Sec. 4, 5
-%   20% model, architecture, failures ..... Sec. 2, 3, 8
-%   25% experiments and reproducibility ... Sec. 6, 7
-%   15% report ............................ whole document
-%   10% video ............................. linked on the first page
-% ============================================================================
 \documentclass[conference]{IEEEtran}
 
 \usepackage[utf8]{inputenc}
@@ -25,10 +11,6 @@
 \usepackage{url}
 \usepackage{xcolor}
 \usepackage[colorlinks=true,urlcolor=blue,citecolor=black,linkcolor=black]{hyperref}
-
-% TODO marker, visible in the PDF; remove before submission
-\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO:} #1\textbf{]}}}
-\newcommand{\everton}[1]{\textcolor{orange}{\textbf{[Everton:} #1\textbf{]}}}
 
 \begin{document}
 
@@ -44,9 +26,7 @@
 
 \maketitle
 
-% ===========================================================================
 \section{Introduction}
-% ===========================================================================
 Replicating a service across several machines a standard way to make systems resilient to faults, but copying alone is not enough: the replicas must agree on a single order of operations, and they must keep agreeing while links drop messages, nodes leave and reenter the grid, among other failures. Many consensus algorithms that provide a solution to this problem exist today, and maintaining a log of agreed-upon state-machine operations is a common implementation approach. The Raft algorithm~\cite{raft2014} is a widely used consensus protocol that is designed to be understandable and easy to teach, and it is the basis of many production systems, including etcd, Consul, and CockroachDB. The practical question, however, is not only whether a protocol can be implemented correctly, but what that correctness costs in throughput, tail latency, and recovery time when faults actually happen.
 
 With this in mind, this project had two main parts: 1. Implementing Raft, as well as a simple key-value storage system on top of it, with the goal of understanding in detail how this consensus algorithm works; and 2. Building an experimental harness on top of these implementations to measure the cost of fault tolerance in a realistic environment. By implementing the resulting system, key distributed systems concepts were explored, such as leader election, consensus, replication and consistency, fault detection and tolerance, peer-to-peer communication, among others.
@@ -65,10 +45,8 @@ This project's starting point was the framework provided by MIT's 6.824 (2020) l
 
 The remainder of this report is organized as follows. Section~\ref{sec:model} states the system model and the failure assumptions. Section~\ref{sec:algs} details the implemented algorithms. Section~\ref{sec:arch} describes the architecture and the container deployment. Section~\ref{sec:correct} argues the correctness properties and describes the automated tests.  Section~\ref{sec:method} defines the experimental methodology and its reproducibility, Section~\ref{sec:results} presents the results, and Section~\ref{sec:conclusion} concludes. This report assumes the reader is familiar with Raft, therefore Appendix~\ref{sec:background} briefly reviews the protocol.
 
-% ===========================================================================
 \section{System Model}
 \label{sec:model}
-% ===========================================================================
 This section describes the assumptions made when implementing Raft and the KV service on top of it. We considered a fixed set of $N$ servers that talk to each other, plus any number of clients. These server nodes are both KV servers and Raft peers. Clients come and go and only send requests. The assumptions listed here are used when arguing correctness and progress in Section~\ref{sec:correct}.
 
 \paragraph{Timing model}
@@ -83,10 +61,8 @@ It is assumed that a node can crash and later restart, losing its volatile state
 \paragraph{Clocks, persistence and restart}
 Raft does not assume synchronized clocks, and no algorithm step reads wall-clock time. Local monotonic clocks are used only to measure timeouts.  Before a node replies to a request or acts on one, it writes to disk what it would need after a crash.  Each write goes to a temporary file that is then renamed, so a crash in the middle of a write won't leave a truncated state.  On restart the node reloads those files and resets only its volatile state.
 
-% ===========================================================================
 \section{Implemented Algorithms}
 \label{sec:algs}
-% ===========================================================================
 
 This project's assignment asks for two complementary algorithms, one from the leader election group of topics and one from the consensus and replication group. Raft not only gives us both, but actually goes quite beyond them. Leader election (Section~\ref{sec:algs-election}) picks a single node to order the commands, and log replication (Section~\ref{sec:algs-replication}) gets a majority of nodes to agree on that order. On top of both, the key/value service (Section~\ref{sec:algs-kv}) turns the agreed-upon log into a linearizable storage system. The produced code mostly follows the specifications of the Raft paper~\cite{raft2014}, and most of it is in \texttt{src/raft/raft.go}.
 
@@ -139,10 +115,8 @@ A request that is not committed within 5\,s is answered with \texttt{ErrTimeout}
 
 On the client side, the \texttt{Clerk} (\texttt{src/kvraft/client.go}) picks a random \texttt{ClientId} when it is created and increments \texttt{Seq} for every new operation. It sends each request to the server that last answered it successfully, and on any failure (no reply, \texttt{ErrWrongLeader} or \texttt{ErrTimeout}) it moves on to the next server and tries again with the same \texttt{Seq}, for as long as it takes.
 
-% ===========================================================================
 \section{Architecture}
 \label{sec:arch}
-% ===========================================================================
 Regarding the dockerized deployment setup, every node runs the same Go binary (\texttt{cmd/kvnode}), with one container per node, orchestrated by Docker Compose (Figure~\ref{fig:arch}).  Inside each container a single process hosts both the \texttt{KVServer} and its \texttt{Raft} peer. The two share memory and exchange messages through the \texttt{applyCh} channel and \texttt{Raft.Start}, while different nodes talk to each other only over the network. Each node therefore opens two listeners: a TCP port for the internal Raft RPCs and an HTTP port for the client-facing key/value API.
 
 \begin{figure}[h]
@@ -153,8 +127,6 @@ Regarding the dockerized deployment setup, every node runs the same Go binary (\
 \end{figure}
 
 The nodes are configured through environment variables. The \texttt{compose.yaml} file on this project's repository contains an example of how to set these variables for a cluster of three nodes.
-
-% This configurability also allows for the same code to run unchanged between the test harness and the container setup: in the tests the nodes are wired over the simulated \texttt{labrpc} network, while in the deployment they are wired over real TCP, and the difference is entirely in how the peer endpoints are created. In the code, this is achieved by having Raft and the KV service depend only on a one-method interface for communication, \texttt{RPCClient}, which both \texttt{labrpc.ClientEnd} (the in-memory simulated network) and \texttt{labrpc.TCPEnd} (a \texttt{net/rpc} client over TCP with a dial and a call deadline) implement.  The test suite exercises exactly the same protocol code that runs in deployment, only over a network that can be told to drop, delay and reorder messages at will.
 
 Clients have their own communication channel, separate from the one used by Raft, via HTTP over the endpoints described in Table~\ref{tab:endpoints}. Followers answer read and write requests with HTTP \texttt{421} and \texttt{ErrWrongLeader} rather than forwarding them, so leader discovery is entirely client-side.
 
@@ -180,10 +152,8 @@ POST & \texttt{/kv/\{key\}} & append the request body to the key \\
 
 Finally, each node persists its durable state to a mounted volume. The raft side persists the current term, vote and log, and the kvserver side persists the key/value map and the response cache.
 
-% ===========================================================================
 \section{Correctness Properties and Tests}
 \label{sec:correct}
-% ===========================================================================
 The Raft paper~\cite{raft2014} already proves that the protocol is safe, so we did not try to prove anything new. What we had to make sure of was that our code really follows the rules that proof depends on, and then test that it does. This section goes through the safety properties this system claims, shows where each one comes from in the implementation, and then describes the tests we used to check them.
 
 \subsection{Safety arguments}
@@ -241,9 +211,7 @@ Total & & 40 & 604.1 \\
 \end{tabular}
 \end{table}
 
-% ===========================================================================
 \section{Experimental Methodology}\label{sec:method}
-% ===========================================================================
 After verifying that our implementation was correct, we set out to run experiments to answer the question of "how does using raft for fault-tolerance impact a system's performance?".
 
 All experiments run on the containerized deployment of Section~\ref{sec:arch}, with every node on the same machine (Table~\ref{tab:env}). A single script, \texttt{scripts/run\_experiments.py}, runs every configuration of Section~\ref{sec:method-config}, each on a fresh cluster, and saves the raw results. \texttt{scripts/README.md} explains how to run it, and \texttt{scripts/analysis.ipynb} processes the raw results into the tables and figures of Section~\ref{sec:results}.
@@ -283,10 +251,8 @@ For log replication, the main question is what it costs to agree on every operat
 \subsection{Configurations}\label{sec:method-config}
 Each parameter was tested at three levels while the other parameters kept their default value (no delay, no loss, three nodes): a delay of 0\,ms, 50\,ms or 100\,ms, a loss rate of 0\,\%, 2\,\% or 5\,\%, and clusters of 3, 5 or 7 nodes. The cluster size was varied not only in the normal scenario but also in the crash and partition scenarios. Each of these configurations ran with the same ten seeds, so all of them receive the same sequences of operations.
 
-% ===========================================================================
 \section{Results}
 \label{sec:results}
-% ===========================================================================
 \subsection{Throughput and Latency}
 
 Table~\ref{tab:perf} shows a summary of the recorded throughput and latency for the tested scenarios. For raw results, refer to the csv files in \texttt{scripts/experiments/*} in the project repository.
@@ -312,7 +278,6 @@ No fault & 3 & 1671 & 4.5 & 7.1 & 9.1 \\
 \bottomrule
 \end{tabular}
 \end{table}
-
 
 With no artificially injected network faults or delay, three nodes sustain 1671 ops/s. Growing the cluster appears to considerably worsen throughput, with a 29\,\% drop from 3 to 5 nodes and a further 19\,\% from 5 to 7. Latency is also considerably affected. Although expected, the scale of the effect of having to coordinate more nodes was surprising.
 
@@ -358,31 +323,21 @@ TTR-service, which measures the client-observable recovery time, averages betwee
 
 TTR-replica, which measures the amount of time it takes for a recovered node to catch up to the majority, is somewhat stable for crashes, taking about 600\,ms. For a leader disconnection, the measurements are noticeably larger and have higher standard deviations: 849\,$\pm$\,447, 1212\,$\pm$\,1129 and 780\,$\pm$\,267\,ms.
 
-
-% ===========================================================================
 \section{Limitations}\label{sec:limits}
-% ===========================================================================
 While developing and testing this project, a number of limitations were identified. In the raft implementation, a new leader does not append the no-op entry that the paper prescribes at the start of each term \cite{raft2014}, so entries from earlier terms are committed only when a client sends a new command. There is no "PreVote" and no "check-quorum" step when triggering elections, so an isolated follower inflates its term and forces an election when it returns, and an isolated leader does not step down. The Raft state and the snapshot are written to two files, each replaced atomically but not together, so a crash between the two writes can leave them out of step. Finally, in our deployment setup, all nodes share one host, so they are not independent failure domains; for replication to be effective, the probability of nodes failing should be independent of one another.
 
-
-% ===========================================================================
 \section{Conclusion}
 \label{sec:conclusion}
-% ===========================================================================
 This project set out to implement Raft with a key-value system on top of it, and to measure what its fault tolerance properties cost in terms of system performance. The implementation was successful, with all tests from the inherited MIT 6.824 test suite having passed.
 
 Taken together, the results point to a clear trade-off. Replication buys availability, but latency and throughput suffer. Under normal operation, three nodes sustained 1671\,ops/s with a median latency of 4.5\,ms. Network delay and loss significantly impacted system latency and throughput. Leader crashes were typically detected and recovered from in about 0.8\,s, but the client-visible recovery took 2.1 to 3.2\,s, dominated by client-defined timeout policies.
 
 Possible goals for future works include fixing the limitations listed in Section~\ref{sec:limits}.
 
-
 \newpage
-% ===========================================================================
 \appendices
-% ===========================================================================
 \section{Background: Raft}
 \label{sec:background}
-% ===========================================================================
 A common way to build a fault-tolerant service is the \emph{replicated state machine}~\cite{vansteen2023}: every server keeps its own copy of the service state (in our case, a key/value map) and a log of commands. If all servers apply the same commands in the same order, all copies go through the same states and end up equal, so any of them can answer for the service (Figure~\ref{fig:raft-rsm}). The hard part is getting the servers to agree on the contents of the log while messages get lost and servers crash, which is a consensus problem. Raft~\cite{raft2014} solves it for a fixed group of $N$ servers, and keeps working as long as a majority of them (more than $N/2$) is up and able to talk to each other. A cluster of three servers survives one failure, and a cluster of five survives two.
 
 \begin{figure}[h]
@@ -407,10 +362,8 @@ A common way to build a fault-tolerant service is the \emph{replicated state mac
 
 \paragraph{Persistence and snapshots} Each server saves its current term, its vote and its log to stable storage before answering any RPC, so that it can crash, restart and rejoin without breaking promises it made before the crash. Since the log would otherwise grow forever, the service periodically saves a \emph{snapshot} of its state, and Raft throws away the log entries that the snapshot covers. A follower that is so far behind that the leader no longer has the entries it needs receives the leader's snapshot through \texttt{InstallSnapshot}.
 
-% ===========================================================================
 \section{Reused Code and Modifications}
 \label{sec:algs-reuse}
-% ===========================================================================
 All the code we reused comes from the framework MIT's 2020 offering of the 6.824 course labs 2 and 3~\cite{mit6824}. Here is what was kept, what was changed, and what was self-written.
 
 The starting point were the stubs in \texttt{raft.go}, \texttt{server.go}, \texttt{client.go} and \texttt{common.go}, which define the API that the tests call (\texttt{Make}, \texttt{Start}, \texttt{GetState}, \texttt{StartKVServer}, the \texttt{Clerk} methods and the RPC argument types). We kept that API and wrote everything behind it. Among the elements kept as they were, are the simulated in-memory network (\texttt{labrpc}), the gob wrapper (\texttt{labgob}), the Porcupine checker~\cite{porcupine} with its key/value model, and the test suites with their harnesses (\texttt{test\_test.go} and \texttt{config.go} in \texttt{src/raft} and \texttt{src/kvraft}).
@@ -419,10 +372,8 @@ Small changes to the labs' skeleton were made. The one-method \texttt{RPCClient}
 
 Everything else was self-written: the Raft implementation (about 1{,}000 lines in \texttt{raft.go}), the KV server and \texttt{Clerk}, the TCP transport (\texttt{labrpc/tcp.go}), the HTTP API with \texttt{/status} and \texttt{HTTPEnd} (\texttt{kvraft/http.go}), the node binary (\texttt{cmd/kvnode}), the load generator (\texttt{cmd/kvbench}), our TCP/HTTP test, the \texttt{Dockerfile} and \texttt{compose.yaml}, and the experiment scripts.
 
-% ===========================================================================
 \section{Automated Tests: Detailed Descriptions}
 \label{sec:correct-tests-detail}
-% ===========================================================================
 \paragraph{2A tests (leader election)} \texttt{InitialElection} checks that three nodes elect exactly one leader and agree on its term, and that the leader is still there two seconds later. \texttt{ReElection} disconnects the leader and expects a new one to be elected. The old leader coming back must not disturb the new one, with two of the three nodes disconnected no leader may be elected, and once a majority is back, one must be.
 
 \paragraph{2B tests (log replication)} Here commands are submitted with \texttt{Start} and must be committed at the expected index by the expected number of nodes. \texttt{FailAgree} keeps committing with one follower disconnected and checks that it catches up when it comes back, while \texttt{FailNoAgree} checks that nothing commits when three of five followers are gone. In \texttt{Rejoin}, a disconnected leader accepts entries that can never commit, and when it reconnects it must drop them in favor of the new leader's log. \texttt{Backup} pushes this further: two minority partitions each pile up 50 uncommitted entries, and then nodes are reconnected in other combinations, so the leader has to overwrite long conflicting suffixes on its followers. \texttt{ConcurrentStarts} calls \texttt{Start} from several goroutines at once. Finally, \texttt{RPCBytes} and \texttt{Count} test for excessive communication, making sure that each command should be sent about once to each follower, an election may take at most 30 RPCs, and one idle second at most 60 RPCs.
@@ -437,7 +388,6 @@ Everything else was self-written: the Raft implementation (about 1{,}000 lines i
 
 \paragraph{Our own test} All inherited tests use \texttt{labrpc} and the in-memory persister, so none of them runs the code that is used in the containers. To cover it, we wrote \texttt{TestHTTPAndTCPCluster}, which starts three nodes wired the same way as in the deployment: Raft over \texttt{net/rpc} on real TCP sockets, state saved to files on disk, and clients talking HTTP. It runs a \texttt{Put}, an \texttt{Append} and a \texttt{Get} through the \texttt{Clerk} and then checks three things: followers answer a write with HTTP 421 instead of applying it, \texttt{/status} reports the same leader on every node, and every node has $\textit{lastApplied} \le \textit{commitIndex} \le \textit{lastLogIndex}$. This is only a smoke test without faults; the experiments of Section~\ref{sec:method} are what exercise the deployment under faults.
 
-% ===========================================================================
 \bibliographystyle{IEEEtran}
 \bibliography{refs}
 

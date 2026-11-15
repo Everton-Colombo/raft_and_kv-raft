@@ -26,6 +26,11 @@ docker compose up --build -d
 docker compose ps
 ```
 
+<p align="center">
+  <img src="docs/report/figs/raft_kvstore_docker.png" width="600"
+       alt="Containerized cluster architecture">
+</p>
+
 Each node exposes:
 
 * `:8000` — Raft peer-to-peer RPC (`RequestVote`, `AppendEntries`, `InstallSnapshot`), internal to the compose network.

@@ -47,10 +47,8 @@ func sumStats(ends []*kvraft.HTTPEnd) kvraft.HTTPStats {
 	return total
 }
 
-// probe issues one Put at a time, forever, logging start/end in absolute Unix
-// nanos so experiment scripts can join the log with fault-injection timestamps.
-// Clerk retries internally, so an op that spans an outage returns when the
-// cluster is serving again.
+// probe issues one Put at a time, logging absolute start/end times so the
+// experiment script can line the log up with the fault.
 func probe(addrs []string, logPath, runID string, ops int, interval time.Duration) {
 	out := os.Stdout
 	if logPath != "" {

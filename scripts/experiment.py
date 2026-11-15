@@ -131,8 +131,6 @@ class Experiment:
         with self.runs_path.open("w", newline="") as f:
             csv.writer(f).writerow(RUNS_COLS)
 
-    # ---- load -------------------------------------------------------------
-
     def bench(self, tag: str, peers: str, seed: int, record: bool = True) -> None:
         cmd = [
             "go", "run", "./cmd/kvbench", "-csv",
@@ -151,8 +149,6 @@ class Experiment:
     def seeds(self, tag: str, peers: str) -> None:
         for seed in range(1, self.args.seeds + 1):
             self.bench(tag, peers, seed)
-
-    # ---- state polling ----------------------------------------------------
 
     def start_timeline(self, path: Path) -> tuple[threading.Event, threading.Thread]:
         stop = threading.Event()
@@ -191,8 +187,6 @@ class Experiment:
         thread.start()
         return stop, thread
 
-    # ---- summary helpers --------------------------------------------------
-
     def timeline_rows(self, path: Path) -> list[dict]:
         with path.open(newline="") as f:
             return list(csv.DictReader(f))
@@ -223,8 +217,6 @@ class Experiment:
                     and row["is_leader"] == "true":
                 return int(row["t_ms"]) - fault_ms
         return None
-
-    # ---- scenarios --------------------------------------------------------
 
     def baseline(self) -> None:
         timeline = self.dir / "timeline.csv"
@@ -348,8 +340,7 @@ class Experiment:
             print("  warning: no leader within 20s", file=sys.stderr)
         self.bench(f"{kind}-during", self.c.majority(leader), seed)
 
-        # the probe's in-flight write only completes once the cluster serves
-        # again; give it time to log that completion before killing it
+        # let the probe log the write that spans the outage before killing it
         self.wait_probe_recovery(probe_path, fault_done_ms, timeout=15)
         os.killpg(os.getpgid(probe.pid), signal.SIGTERM)
         try:
