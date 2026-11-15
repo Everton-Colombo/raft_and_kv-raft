@@ -188,7 +188,10 @@ Each \texttt{AppendEntries} RPC carries the index and term of the entry right be
 Every accepted request therefore extends a prefix that the follower already shares with the leader, and by induction, if two logs have an entry with the same index and term,
 they agree on everything before it.
 
-\paragraph{Committed entries are never lost} The main idea that supports this is the election restriction, which states that a node only votes for a candidate whose log is at least as up to date as its own, meaning its last entry has a higher term, or the same term and an index at least as high. A committed entry is stored on a majority and the new leader was voted in by a majority, so at least one of a leader's voters has the entry and would have refused a candidate without it. The paper turns this intuition into an induction over terms.
+\paragraph{Committed entries are never lost} Since followers' logs are made to match the leader's, it suffices that every leader of a later term has all committed entries.
+This follows from the election restriction: a node only votes for a candidate whose log is at least as up to date as its own, that is, whose last entry has a higher term than the voter's,
+or the same term and an index at least as high. A committed entry is stored on a majority of nodes, and the new leader was voted in by a majority,
+so at least one of its voters has the entry and would have refused a candidate without it. The Raft paper~\cite{raft2014} proves this formally, by induction over terms.
 
 \paragraph{Same commands in the same order} \texttt{commitIndex} never decreases, and a single goroutine per node delivers entries to the service strictly in index order. Together with the two properties above, this means every replica applies the same command at each index, so all KV replicas go through the same sequence of states. 
 
