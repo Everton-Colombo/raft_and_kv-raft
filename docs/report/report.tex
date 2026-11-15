@@ -44,17 +44,28 @@ replication, consistency, and failure detection.
 
 The project repository can be accessed \href{https://github.com/Everton-Colombo/raft_and_kv-raft}{here}, and a demonstration video \href{https://youtu.be/8nt4VyT0qKw}{here}.
 
-\subsection*{Basis and contributions}
-This project's starting point was the framework provided by MIT's 6.824 (2020) labs 2 and 3~\cite{mit6824}, which supplied stub interfaces, an in-memory simulated network for tests, the Porcupine linearizability checker~\cite{porcupine}, and, crucially, a thorough set of tests. The protocol and service implementations, client interface, container packaging, and experimental apparatus were self-written. Appendix~\ref{sec:algs-reuse} lists exactly what was kept, changed, and written. Concretely, this project's contributions are:
+\subsection*{Basis and scope}
+This project's starting point was the framework of labs 2 (Raft) and 3 (a key/value service on top of it) of MIT's 6.824 course (2020)~\cite{mit6824}, which supplied, crucially,
+a thorough set of tests, along with what they need to run: the function signatures they call, a simulated in-memory network on which they inject faults,
+and the Porcupine linearizability checker~\cite{porcupine}. The Raft and key/value code (and everything around it) is ours. Appendix~\ref{sec:algs-reuse} lists exactly what was kept,
+changed, and written. Concretely, we built:
 
 \begin{itemize}
-\item \textbf{Self-Written Raft Implementation:} following MIT 6.824's labs 2A--2C + 3B, our custom raft implementation closely follows Raft's  paper's guidelines.
-\item \textbf{Fault-tolerant Key/Value Storage Service Implementation:} following MIT 6.824's labs 3A--3B, a replicated key-value storage service was built on top of the Raft implementation built before. It includes client-side leader discovery with retry, response caching, and state snapshotting.
-\item \textbf{Deployment Setup}: A Dockerfile for container image configuration, and a \texttt{compose.yaml} file for setting up multiple nodes were written. The system's transport layer, ports, and persistence behavior were made configurable via environment variables, so that the same code can run both in the labs' test suites (over a simulated network) and in a containerized deployment (over real \texttt{net/rpc} TCP).
-\item \textbf{Interface and Experimental Harness}: an HTTP API was exposed so that clients can interface with the KV application. A \texttt{/status} endpoint was also created, exposing raft state variables, plus a benchmark client and an experiments script that simulates multiple scenarios.
+\item \textbf{Raft}, with leader election, log replication, persistence and snapshots, closely following the Raft paper~\cite{raft2014}.
+\item \textbf{Key/Value Service}, built on top of our Raft implementation, with clients that find the current leader and resend their request when it changes,
+a response cache that keeps retried requests from being applied twice, and snapshots of its state that replace the log entries already applied so that the Raft log does not grow forever.
+\item \textbf{Container Deployment}, which uses a Dockerfile and \texttt{compose.yaml} to run every replica from the same image, each in its own container,
+with environment variables that give each replica its ID, the other replicas' addresses and where to store its state.
+\item \textbf{HTTP Interface}, through which clients reach the service, plus a \texttt{/status} endpoint that reports each replica's term, leader and log position.
+\item \textbf{Experiments}, driven by a script that crashes, disconnects or slows down replicas while a benchmark client measures throughput and latency.
+This client uses Porcupine to check that the service stays linearizable, and the script also queries \texttt{/status} every 50\,ms to measure how long elections and recovery take.
 \end{itemize}
 
-The remainder of this report is organized as follows. Section~\ref{sec:model} states the system model and the failure assumptions. Section~\ref{sec:algs} details the implemented algorithms. Section~\ref{sec:arch} describes the architecture and the container deployment. Section~\ref{sec:correct} argues the correctness properties and describes the automated tests.  Section~\ref{sec:method} defines the experimental methodology and its reproducibility, Section~\ref{sec:results} presents the results, and Section~\ref{sec:conclusion} concludes. This report assumes the reader is familiar with Raft, therefore Appendix~\ref{sec:background} briefly reviews the protocol.
+The remainder of this report is organized as follows. Section~\ref{sec:model} states the system model and the failure assumptions, and Section~\ref{sec:algs} details the implemented algorithms.
+Section~\ref{sec:arch} outlines the architecture and the container deployment. Section~\ref{sec:correct} lists the correctness properties, argues why they hold,
+and describes the automated tests. Section~\ref{sec:method} covers the experimental methodology, the execution environment and the scripts that automate the experiments.
+Section~\ref{sec:results} presents the results, Section~\ref{sec:limits} discusses the limitations of the implementation and of running all replicas on a single machine,
+and Section~\ref{sec:conclusion} concludes. Readers unfamiliar with Raft can find a brief review in Appendix~\ref{sec:background}.
 
 \section{System Model}
 \label{sec:model}
