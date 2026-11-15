@@ -193,7 +193,9 @@ This follows from the election restriction: a node only votes for a candidate wh
 or the same term and an index at least as high. A committed entry is stored on a majority of nodes, and the new leader was voted in by a majority,
 so at least one of its voters has the entry and would have refused a candidate without it. The Raft paper~\cite{raft2014} proves this formally, by induction over terms.
 
-\paragraph{Same commands in the same order} \texttt{commitIndex} never decreases, and a single goroutine per node delivers entries to the service strictly in index order. Together with the two properties above, this means every replica applies the same command at each index, so all KV replicas go through the same sequence of states. 
+\paragraph{Same commands in the same order} \texttt{commitIndex} never decreases, and a single goroutine per node delivers entries to the service strictly in index order.
+Together with the Log Matching property and the guarantee that committed entries are never lost, this means every replica applies the same command at each index,
+so they all go through the same sequence of states.
 
 \paragraph{Linearizability} Every client operation, \texttt{Get} included, is turned into a log entry, and the server only replies after that entry is applied. The moment of application falls between the request and the reply, which is exactly the instant linearizability asks for. It also means that an old leader that was cut off cannot serve stale reads: it cannot commit anything, so its reads never return. The tricky part are the retries. If a reply is lost, the \texttt{Clerk} sends the request again, possibly to another server, and the same command can end up in the log twice. Each server stores, for every client, the \texttt{Seq} and result of the last operation it applied, and a request whose \texttt{Seq} is not newer than that gets the stored result instead of being applied a second time. Since a \texttt{Clerk} has only one request in flight at a time, remembering the last one is enough.
 
