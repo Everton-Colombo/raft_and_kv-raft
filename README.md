@@ -1,5 +1,12 @@
 # MC714 - Trabalho 2: Raft + KV-Raft
 
+<p align="center">
+  <a href="https://youtu.be/8nt4VyT0qKw">
+    <img src="https://img.shields.io/badge/%E2%96%B6_Watch_the_demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white"
+         alt="Watch the demo video">
+  </a>
+</p>
+
 Raft (leader election, log replication, persistence, snapshots) and a linearizable
 key/value service on top of it, packaged as independent containers.
 
