@@ -1,4 +1,4 @@
-# MC714 — Trabalho 2: Raft + KV-Raft
+# MC714 - Trabalho 2: Raft + KV-Raft
 
 Raft (leader election, log replication, persistence, snapshots) and a linearizable
 key/value service on top of it, packaged as independent containers.
@@ -33,8 +33,8 @@ docker compose ps
 
 Each node exposes:
 
-* `:8000` — Raft peer-to-peer RPC (`RequestVote`, `AppendEntries`, `InstallSnapshot`), internal to the compose network.
-* `:9000` — KV HTTP API, published on the host as `9000`, `9001`, `9002`.
+* `:8000`: Raft peer-to-peer RPC (`RequestVote`, `AppendEntries`, `InstallSnapshot`), internal to the compose network.
+* `:9000`: KV HTTP API, published on the host as `9000`, `9001`, `9002`.
 
 ## Talk to it
 

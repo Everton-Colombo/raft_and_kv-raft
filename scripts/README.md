@@ -23,16 +23,16 @@ standard library is used.
 
 What each scenario does:
 
-* **baseline** — no fault. Measures throughput/latency and counts leader changes
+* **baseline**: no fault. Measures throughput/latency and counts leader changes
   and term growth over the run.
-* **netem** — `tc netem delay/loss` on every node's `eth0` (egress), then the
+* **netem**: `tc netem delay/loss` on every node's `eth0` (egress), then the
   same workload; the qdisc is always removed on exit. Each seed also records a
   timeline and a `summary.csv` row with its leader churn.
-* **kill-leader** — stops the leader container, benchmarks the surviving
+* **kill-leader**: stops the leader container, benchmarks the surviving
   majority, restarts it and measures replica catch-up.
-* **partition** — `docker network disconnect` on the leader, same measurements,
+* **partition**: `docker network disconnect` on the leader, same measurements,
   then reconnects it.
-* **sweep** — generates `scripts/experiments/compose-n<N>.yaml` for N = 3/5/7,
+* **sweep**: generates `scripts/experiments/compose-n<N>.yaml` for N = 3/5/7,
   brings each cluster up, discards one warm-up run (cold start), runs the
   workload and tears it down. Run `docker compose down` first: the generated
   clusters use the same host ports (`9000..9000+N-1`).
@@ -60,28 +60,28 @@ tried, `wrong_leader_pct` the share of attempts answered with `421`.
 
 ## Derived metrics
 
-* **fault_unix** (ms) — the fault timestamp, taken right before `docker stop` /
+* **fault_unix** (ms): the fault timestamp, taken right before `docker stop` /
   `docker network disconnect`, since the fault is already in effect while the
   command runs.
-* **time-to-elect** (ms) — fault timestamp → first `/status` sample where some
+* **time-to-elect** (ms): fault timestamp → first `/status` sample where some
   node reports `is_leader` at a term greater than the pre-fault term.
-* **TTR-service** (ms) — fault timestamp → first probe write that completes.
+* **TTR-service** (ms): fault timestamp → first probe write that completes.
   Because the probe is sequential, the write in flight at fault time is the one
   that spans the outage; its completion is when the cluster served again. In
   `kill-leader` this includes the client's HTTP timeout (~2 s), which is the
   honest client-visible recovery time, not just the election time.
-* **TTR-replica** (ms) — container restart/reconnect → first poll where the
+* **TTR-replica** (ms): container restart/reconnect → first poll where the
   returning node's `last_applied >= leader.commit_index`. Compares
   `last_applied` against the leader's `commit_index` (not `last_log_index`),
   because the leader usually has an uncommitted tail.
-* **fault_cmd** (ms) — how long `docker stop` / `docker network disconnect`
+* **fault_cmd** (ms): how long `docker stop` / `docker network disconnect`
   took to return. TTR-service only counts probe writes that end after that,
   since writes ending while the command runs were served before the fault.
-* **heal_unix** (ms) — when `docker start` / `docker network connect`
+* **heal_unix** (ms): when `docker start` / `docker network connect`
   returned; the TTR-replica interval starts at this instant.
-* **leader churn** — number of leader changes and `max(term) - min(term)` over
+* **leader churn**: number of leader changes and `max(term) - min(term)` over
   the baseline run, plus changes/minute.
-* **retry cost** — from `runs.csv`: `retry_pct`, `attempts_per_op`,
+* **retry cost**: from `runs.csv`: `retry_pct`, `attempts_per_op`,
   `wrong_leader_pct`. These come from counters inside `HTTPEnd`, so they count
   exactly the RPC attempts the client made.
 
@@ -136,7 +136,7 @@ Checks every `timeline*.csv` for election safety (at most one node reports `is_l
 
 A node that stays isolated keeps calling elections, so its term grows without
 bound; when it heals it rejects the healthy leader's `AppendEntries` (stale
-term) and forces repeated re-elections — the *disruptive server* problem from
+term) and forces repeated re-elections: the *disruptive server* problem from
 the Raft thesis (§4.2.3). This implementation has no PreVote, so the healed node
 can stay out and the cluster keeps churning. `kill-leader` does not have this
 behaviour because a stopped process does not campaign. If `partition` leaves the
