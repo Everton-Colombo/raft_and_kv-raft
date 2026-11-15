@@ -68,7 +68,8 @@ Section~\ref{sec:results} presents the results, Section~\ref{sec:limits} discuss
 and Section~\ref{sec:conclusion} concludes. Readers unfamiliar with Raft can find a brief review in Appendix~\ref{sec:background}.
 
 \section{System Model}\label{sec:model}
-This section describes the assumptions made when implementing Raft and the KV service on top of it. We considered a fixed set of $N$ servers that talk to each other, plus any number of clients. These server nodes are both KV servers and Raft peers. Clients come and go and only send requests. The assumptions listed here are used when arguing correctness and progress in Section~\ref{sec:correct}.
+The safety and liveness arguments of Section~\ref{sec:correct} rely on the assumptions below. We consider a fixed set of $N$ replicas that talk to each other, plus any number of clients.
+Each replica runs both a key/value server and a Raft peer. Clients, which take no part in Raft, may come and go at any time.
 
 \paragraph{Timing model}
 Raft is partially synchronous. It does not know in advance any hard limit on message delay or on how long a node takes to execute a step, but timeouts and heartbeats managed by local timers are used to detect failures and guarantee progress. Safety does not depend on timing, but progress does depend on timeout constants, namely: heartbeats every 150\,ms, election timeouts of 500--700\,ms, peer RPCs bounded at 800\,ms and client requests at 2\,s.
