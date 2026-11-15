@@ -364,11 +364,17 @@ each replaced atomically but not together, so a crash between the two writes can
 so they are not independent failure domains; for replication to be effective, the probability of nodes failing should be independent of one another.
 
 \section{Conclusion}\label{sec:conclusion}
-This project set out to implement Raft with a key-value system on top of it, and to measure what its fault tolerance properties cost in terms of system performance. The implementation was successful, with all tests from the inherited MIT 6.824 test suite having passed.
+This project set out to implement Raft with a key/value service on top of it and to measure the performance cost of its fault tolerance.
+The implementation passes the whole MIT 6.824 test suite, and every one of the 200 experiment runs also passed the Porcupine linearizability check.
 
-Taken together, the results point to a clear trade-off. Replication buys availability, but latency and throughput suffer. Under normal operation, three nodes sustained 1671\,ops/s with a median latency of 4.5\,ms. Network delay and loss significantly impacted system latency and throughput. Leader crashes were typically detected and recovered from in about 0.8\,s, but the client-visible recovery took 2.1 to 3.2\,s, dominated by client-defined timeout policies.
+Taken together, the results point to a clear trade-off: replication buys availability, but latency and throughput suffer. Under normal operation,
+three nodes sustained 1671\,ops/s with a median latency of 4.5\,ms. Growing to five nodes cost 29\,\% of the throughput, and to seven a further 19\,\%.
+A network delay raised the median latency to about three times the injected delay, and packet loss left the median untouched but raised the p99 from 9.1\,ms to as much as 374\,ms.
+After a leader fault, a new leader was typically elected in 0.8 to 0.9\,s (over 2\,s in a few runs at $N=3$), and client-visible recovery took 2.1 to 3.2\,s,
+likely dominated by the clients' 2\,s timeout.
 
-Possible goals for future works include fixing the limitations listed in Section~\ref{sec:limits}.
+Future work includes fixing the limitations of Section~\ref{sec:limits}, running the replicas on separate machines for more representative measurements,
+and tuning the client timeout to shorten client-visible recovery.
 
 \newpage
 \appendices\section{Background: Raft}\label{sec:background}
