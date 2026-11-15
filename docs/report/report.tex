@@ -197,7 +197,12 @@ so at least one of its voters has the entry and would have refused a candidate w
 Together with the Log Matching property and the guarantee that committed entries are never lost, this means every replica applies the same command at each index,
 so they all go through the same sequence of states.
 
-\paragraph{Linearizability} Every client operation, \texttt{Get} included, is turned into a log entry, and the server only replies after that entry is applied. The moment of application falls between the request and the reply, which is exactly the instant linearizability asks for. It also means that an old leader that was cut off cannot serve stale reads: it cannot commit anything, so its reads never return. The tricky part are the retries. If a reply is lost, the \texttt{Clerk} sends the request again, possibly to another server, and the same command can end up in the log twice. Each server stores, for every client, the \texttt{Seq} and result of the last operation it applied, and a request whose \texttt{Seq} is not newer than that gets the stored result instead of being applied a second time. Since a \texttt{Clerk} has only one request in flight at a time, remembering the last one is enough.
+\paragraph{Linearizability} Every client operation, \texttt{Get} included, is turned into a log entry, and the server only replies after that entry is applied.
+The moment of application falls between the request and the reply, which is exactly the instant linearizability asks for.
+Routing reads through the log also means that an old leader that was cut off cannot serve stale reads: it cannot commit anything, so its reads never succeed. The tricky part is the retries.
+If a reply is lost, the \texttt{Clerk} sends the request again, possibly to another server, and the same command can end up in the log twice. Each server stores, for every client,
+the \texttt{Seq} and result of the last operation it applied, and a request whose \texttt{Seq} is not newer than that gets the stored result instead of being applied a second time.
+Since a \texttt{Clerk} has only one request in flight at a time, remembering the last one is enough.
 
 \paragraph{Liveness} Unlike safety, liveness depends on timing. Randomized election timeouts make repeated split votes unlikely, and once a leader can reach a majority, its heartbeats keep the followers from starting new elections while it retries \texttt{AppendEntries} until every entry is replicated.
 
