@@ -175,7 +175,7 @@ POST & \texttt{/kv/\{key\}} & append the request body to the key \\
 Finally, each node persists its durable state to a mounted volume. The raft side persists the current term, vote and log, and the kvserver side persists the key/value map and the response cache.
 
 \section{Correctness Properties and Tests}\label{sec:correct}
-The Raft paper~\cite{raft2014} already proves that the protocol is safe, so we did not try to prove anything new. What we had to make sure of was that our code really follows the rules that proof depends on, and then test that it does. This section goes through the safety properties this system claims, shows where each one comes from in the implementation, and then describes the tests we used to check them.
+The Raft paper~\cite{raft2014} already proves that the protocol is safe, so our task was to make sure our code follows the rules that proof depends on, and to test that it does.
 
 \subsection{Safety arguments}\label{sec:correct-safety}
 
