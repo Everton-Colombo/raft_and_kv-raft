@@ -37,9 +37,8 @@ Raft's fault tolerance comes at a cost, however. Every operation must reach a ma
 and waiting for them over the network costs throughput and latency. Moreover, Raft keeps that single order by routing all client requests through one leader replica, so when the leader crashes,
 the service stops until the other replicas elect a new one.
 
-With this in mind, this project had two main parts: (1) implementing Raft and a simple key/value storage system on top of it to understand the protocol in detail,
-and checking it against the extensive test suite of MIT's 6.824 course~\cite{mit6824};
-and (2) automating experiments to measure the cost of fault tolerance in a containerized deployment. Together, these parts cover key distributed systems topics such as leader election, consensus,
+With this in mind, this project had two main parts: 1) implementing Raft and a simple key/value storage system on top of it to understand the protocol in detail;
+and 2) automating experiments to measure the cost of fault tolerance in a containerized deployment. Together, these parts cover key distributed systems topics such as leader election, consensus,
 replication, consistency, and failure detection.
 
 The project repository can be accessed \href{https://github.com/Everton-Colombo/raft_and_kv-raft}{here}, and a demonstration video \href{https://youtu.be/8nt4VyT0qKw}{here}.
@@ -56,15 +55,14 @@ Appendix~\ref{sec:algs-reuse} lists exactly what was kept, changed, and written.
 a response cache that keeps retried requests from being applied twice, and snapshots of its state that replace the log entries already applied so that the Raft log does not grow forever.
 \item \textbf{Container Deployment}, which uses a Dockerfile and \texttt{compose.yaml} to run every replica from the same image, each in its own container,
 with environment variables that give each replica its ID, the other replicas' addresses and where to store its state.
-\item \textbf{HTTP Interface}, through which clients reach the service, plus a \texttt{/status} endpoint that reports each replica's term, leader and log position.
+\item \textbf{HTTP Interface}, through which clients reach the service, plus a \texttt{/status} endpoint that reports each replica's Raft state.
 \item \textbf{Experiments}, driven by a script that crashes, disconnects or slows down replicas while a benchmark client measures throughput and latency.
-This client uses Porcupine to check that the service stays linearizable, and the script also queries \texttt{/status} every 50\,ms to measure how long elections and recovery take.
 \end{itemize}
 
 The remainder of this report is organized as follows. Section~\ref{sec:model} states the system model and the failure assumptions, and Section~\ref{sec:algs} details the implemented algorithms.
 Section~\ref{sec:arch} outlines the architecture and the container deployment. Section~\ref{sec:correct} lists the correctness properties, argues why they hold,
-and describes the automated tests. Section~\ref{sec:method} covers the experimental methodology, the execution environment and the scripts that automate the experiments.
-Section~\ref{sec:results} presents the results, Section~\ref{sec:limits} discusses the limitations of the implementation and of running all replicas on a single machine,
+and describes the automated tests. Section~\ref{sec:method} covers the experimental methodology.
+Section~\ref{sec:results} presents the results, Section~\ref{sec:limits} discusses limitations,
 and Section~\ref{sec:conclusion} concludes. Readers unfamiliar with Raft can find a brief review in Appendix~\ref{sec:background}.
 
 \section{System Model}\label{sec:model}
@@ -79,11 +77,11 @@ heartbeats every 150\,ms, election timeouts of 500--700\,ms, peer RPCs bounded a
 \paragraph{Channels}
 Each pair of nodes has its own connection, and messages are addressed to one specific node; there is no broadcast medium. Raft communication happens via remote procedure calls,
 and client-server interaction with the KV service layer is done with HTTP requests. We assume that a channel can lose, delay, duplicate and reorder messages,
-and that a message may take arbitrarily long or never arrive. Retransmission and retries are the sender's job (the Raft leader, a candidate or the client), not the channel's.
+and that a message may take arbitrarily long or never arrive. Retransmission and retries are the sender's job, not the channel's.
 
 \paragraph{Failures}
 It is assumed that a node can crash and later restart, losing its volatile state but keeping what it wrote to disk. The network can also split into partitions, for a while or forever.
-We do not consider Byzantine faults; messages are not forged or corrupted. Safety holds no matter how many replicas fail (apart from the persistence gap noted in Section~\ref{sec:limits}),
+We do not consider Byzantine faults; messages are not forged or corrupted. Safety holds no matter how many replicas fail,
 but progress requires that no more than $\lfloor (N-1)/2 \rfloor$ of the $N$ replicas fail at the same time.
 
 \paragraph{Clocks, persistence and restart}
@@ -119,7 +117,7 @@ Replication to each follower is done by a single function, \texttt{replicateTo},
 On the follower side, the handler decides whether to accept or reject the received entries, rejecting requests from older terms. It also records the sender as the current leader and resets the election timer. It then runs the consistency check: if it has no entry at \texttt{PrevLogIndex}, or the entry there has a different term, it refuses, indicating to the leader that it should send even older log entries by decrementing the follower's \texttt{nextIndex} value. Otherwise, it walks through the new entries, skips the ones it already has, cuts its log at the first one that conflicts and appends the rest. Finally, it saves the log, sets its \texttt{commitIndex} to the smaller of the leader's commit index and its own last index, and wakes up the goroutine that applies entries.
 
 After each reply, the leader looks for the highest index that can be committed, i.e., the highest index that is stored on a majority of nodes, itself included, using \texttt{matchIndex}.
-It scans backwards from the end of its log and stops at the first entry that is not from its current term, so it never commits an old entry by counting replicas (the Figure~8 rule).
+It scans backwards from the end of its log and stops at the first entry that is not from its current term, so it never commits an old entry by counting replicas (Raft's paper's Figure~8 rule).
 On every node, a separate goroutine waits on a condition variable until \texttt{commitIndex} passes \texttt{lastApplied}.
 It then sends the newly committed entries to the client service on \texttt{applyCh}.
 
@@ -128,7 +126,7 @@ It then sends the newly committed entries to the client service on \texttt{apply
 \subsubsection{\textbf{Persistence}} The current term, the vote, the log and the snapshot index are saved on ``disk'' whenever one of them changes,
 always before the reply to the RPC that caused the change is sent. On restart, the node reads them back and starts as a follower, essentially picking up from where it stopped.
 
-\subsubsection{\textbf{Snapshots}} To avoid letting the replicated log grow indefinitely, the client service decides when to take a snapshot: after applying an entry, if Raft's saved state has reached \texttt{maxraftstate} bytes, it serializes its own state and calls \texttt{Snapshot(index, data)}. Raft then drops all entries up to \texttt{index}, and saves the trimmed state and the snapshot together. When a follower needs entries that the leader has already dropped, \texttt{replicateTo} sends \texttt{InstallSnapshot} instead, carrying the whole snapshot in a single message. The follower does not install it immediately, keeping it as a pending snapshot and letting the apply goroutine hand it to the service through \texttt{applyCh}, in order with the other messages. The service then calls \texttt{CondInstallSnapshot}, which only accepts the snapshot if it is ahead of everything the node has committed. In that case, Raft keeps the part of its log after the snapshot if it agrees with it, discards the whole log otherwise, and moves \texttt{commitIndex} and \texttt{lastApplied} to the snapshot index.
+\subsubsection{\textbf{Snapshots}} To avoid letting the replicated log grow indefinitely, the client service decides when to take a snapshot. After applying an entry, if Raft's saved state has reached \texttt{maxraftstate} bytes, it serializes its own state and calls \texttt{Snapshot(index, data)}. Raft then drops all entries up to \texttt{index}, and saves the trimmed state and the snapshot together. When a follower needs entries that the leader has already dropped, \texttt{replicateTo} sends \texttt{InstallSnapshot} instead, carrying the whole snapshot in a single message. The follower does not install it immediately, keeping it as a pending snapshot and letting the apply goroutine hand it to the service through \texttt{applyCh}, in order with the other messages. The service then calls \texttt{CondInstallSnapshot}, which only accepts the snapshot if it is ahead of everything the node has committed. In that case, Raft keeps the part of its log after the snapshot if it agrees with it, discards the whole log otherwise, and moves \texttt{commitIndex} and \texttt{lastApplied} to the snapshot index.
 
 \subsection{Fault-Tolerant key/value service}\label{sec:algs-kv}
 After implementing Raft, a fault-tolerant, linearizable key/value service was built on top of it; most of its code is in \texttt{src/kvraft/server.go}. Each node runs a \texttt{KVServer} on top of its Raft peer. Its state is the key/value map plus, for each client, the \texttt{Seq} and result of the last operation applied for that client, which makes up the response cache. The service supports \texttt{Get}, \texttt{Put} and \texttt{Append}, and every one of them, reads included, is wrapped in an \texttt{Op} record with the client's \texttt{(ClientId, Seq)} pair and submitted to the Raft layer with \texttt{Start}. Sending reads through the log is the simplest way to make them linearizable.
@@ -193,16 +191,16 @@ Every accepted request therefore extends a prefix that the follower already shar
 they agree on everything before it.
 
 \paragraph{Committed entries are never lost} Since followers' logs are made to match the leader's, it suffices that every leader of a later term has all committed entries.
-This follows from the election restriction: a node only votes for a candidate whose log is at least as up to date as its own, that is, whose last entry has a higher term than the voter's,
+This follows from the election restriction, which states that a node only votes for a candidate whose log is at least as up to date as its own, that is, whose last entry has a higher term than the voter's,
 or the same term and an index at least as high. A committed entry is stored on a majority of nodes, and the new leader was voted in by a majority,
-so at least one of its voters has the entry and would have refused a candidate without it. The Raft paper~\cite{raft2014} proves this formally, by induction over terms.
+so at least one of its voters has the entry and would have refused a candidate without it. The Raft paper~\cite{raft2014} turns this intuition into an induction over terms.
 
 \paragraph{Same commands in the same order} \texttt{commitIndex} never decreases, and a single goroutine per node delivers entries to the service strictly in index order.
 Together with the Log Matching property and the guarantee that committed entries are never lost, this means every replica applies the same command at each index,
 so they all go through the same sequence of states.
 
 \paragraph{Linearizability} Every client operation, \texttt{Get} included, is turned into a log entry, and the server only replies after that entry is applied.
-The moment of application falls between the request and the reply, which is exactly the instant linearizability asks for.
+The moment of application falls between the request and the reply, which is within what linearizability asks for.
 Routing reads through the log also means that an old leader that was cut off cannot serve stale reads: it cannot commit anything, so its reads never succeed. The tricky part is the retries.
 If a reply is lost, the \texttt{Clerk} sends the request again, possibly to another server, and the same command can end up in the log twice. Each server stores, for every client,
 the \texttt{Seq} and result of the last operation it applied, and a request whose \texttt{Seq} is not newer than that gets the stored result instead of being applied a second time.
@@ -251,7 +249,7 @@ Total & & 40 & 604.1 \\
 \end{table}
 
 \section{Experimental Methodology}\label{sec:method}
-After verifying our implementation was correct, we set out to measure the performance cost of Raft's fault tolerance in our key/value service.
+After verifying that the implementations were correct, we set out to measure the performance cost of Raft's fault tolerance in the key/value service.
 
 All experiments run on the containerized deployment of Section~\ref{sec:arch}, with every node on the same machine (Table~\ref{tab:env}). A single script, \texttt{scripts/run\_experiments.py}, runs every configuration of Section~\ref{sec:method-config}, each on a fresh cluster, and saves the raw results. \texttt{scripts/README.md} explains how to run it, and \texttt{scripts/analysis.ipynb} processes the raw results into the tables and figures of Section~\ref{sec:results}.
 
@@ -292,9 +290,9 @@ In the crash and partition scenarios, we also measure how long the cluster takes
 For leader election, the main question is how long the cluster stays without a leader. From the node states we measure the \emph{time to elect},
 which corresponds to the time from the fault occurring until some node reports being leader in a newer term. The probe gives us the time to recover service (\emph{TTR-service}):
 the time from the fault until its first write that completes after it. It can be much longer than the election,
-since a client whose request went to the old leader only tries another node after its client-side request timeout.
+since a client whose request went to the old leader only tries another node after its client-side request timeouts.
 
-For log replication, the main question is what it costs to agree on every operation. This cost shows itself in the 50th, 95th and 99th latency percentiles (p50, p95, p99) of each run.
+For log replication, the main question is what it costs to agree on every operation. This cost shows itself in the 50th, 95th and 99th latency percentiles of each run.
 We also measure throughput, though the values we've measured have a different meaning than the usual: since each client waits for a reply before its next request,
 the throughput is set by latency, not by how many requests the cluster could handle. After a crash or a partition, the node states also give us the time to recover a replica
 (\emph{TTR-replica}), which is how long the returning node takes to apply everything the new leader had committed.
@@ -337,7 +335,7 @@ Adding a 50\,ms delay on the network raises the median latency to 152\,ms, almos
 (leader to follower, follower to leader, leader to client). Throughput falls to 51\,ops/s,
 which matches the expected relationship of $\text{throughput} = N_\text{clients} / \text{latency} =8/0.152$. Doubling the delay doubles the effect on both numbers (302\,ms, 26\,ops/s).
 
-Adding loss to the network did not raise the median latency (1.8--1.9\,ms, below the 4.5\,ms of the fault-free runs), but the occasional retransmissions show on the tail.
+Adding loss to the network did not considerably affect the median latency, but the occasional retransmissions show on the tail.
 The p99 jumps from 9.1\,ms without faults to 210\,ms at 2\,\% loss and 374\,ms at 5\,\% loss.
 
 \subsection{Recovery from a leader fault}
@@ -370,10 +368,8 @@ Disconnect & 3 & 1571 $\pm$ 1380 & 3162 $\pm$ 1611 & 849 $\pm$ 447 \\
 \caption{One representative leader-crash run ($N=5$, seed 5): writes completed per second (top) and latency of each write (bottom).}\label{fig:leader-fault}
 \end{figure}
 
-The time to elect is much more stable with five and seven nodes than with three, for both faults. At three nodes, three runs took about 4\,s;
-in all of them, two nodes stopped answering \texttt{/status} at the same time for over 3\,s in total, which points to a stall of the host or of Docker rather than of Raft.
-Only one other slow run (2.0\,s) shows the extra term of a split vote. The typical election takes 0.8 to 0.9\,s, which matches the time the fault command takes to apply (about 0.3\,s),
-the 500--700\,ms election timeout counted from the last heartbeat, and the 50\,ms polling resolution.
+The time to elect is much more stable with five and seven nodes than with three, for both faults. The typical election takes 0.8 to 0.9\,s, which matches the sum of
+the 500--700\,ms election timeout counted from the last heartbeat, and the 50\,ms polling resolution, plus some variation.
 
 TTR-service averages between 2.1 and 3.2\,s across configurations. It also varies considerably between runs, except for partitions with seven nodes.
 A possible explanation for this is that clients are set up to have 2\,s HTTP timeouts, and may or may not have to wait the full length of this timeout before searching for the new leader.
@@ -392,14 +388,13 @@ so latencies are lower than between real machines, and all nodes compete for the
 This project set out to implement Raft with a key/value service on top of it and to measure the performance cost of its fault tolerance.
 The implementation passes the whole MIT 6.824 test suite, and every one of the 200 experiment runs also passed the Porcupine linearizability check.
 
-Taken together, the results point to a clear trade-off: replication buys availability, but latency and throughput suffer. Under normal operation,
+Taken together, the results point to a trade-off, in which replication buys availability, but latency and throughput suffer. Under normal operation,
 three nodes sustained 1671\,ops/s with a median latency of 4.5\,ms. Growing to five nodes cost 29\,\% of the throughput, and to seven a further 19\,\%.
 A network delay raised the median latency to about three times the injected delay, and packet loss did not raise the median but pushed the p99 from 9.1\,ms to as much as 374\,ms.
-After a leader fault, a new leader was typically elected in 0.8 to 0.9\,s (over 2\,s in a few runs at $N=3$), and client-visible recovery took 2.1 to 3.2\,s,
-likely dominated by the clients' 2\,s timeout.
+After a leader fault, a new leader was typically elected in 0.8 to 0.9\,s, and client-visible recovery took 2.1 to 3.2\,s,
+likely dominated by client-defined timeouts.
 
-Future work includes fixing the limitations of Section~\ref{sec:limits}, running the replicas on separate machines for more representative measurements,
-and tuning the client timeout to shorten client-visible recovery.
+Future work includes fixing the limitations of Section~\ref{sec:limits}, specially running the replicas on separate machines for more meaningful measurements.
 
 \newpage
 \appendices\section{Background: Raft}\label{sec:background}
